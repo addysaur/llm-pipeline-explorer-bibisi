@@ -1,0 +1,1364 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="color-scheme" content="dark" />
+<link rel="icon" href="data:," />
+<title>LLM Pipeline Explorer — BIBISI</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;800&family=Archivo:wght@600;800;900&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#020503;
+  --bg2:#04140a;
+  --panel:#061109;
+  --panel2:#081a0e;
+  --line:#14532d;
+  --line-bright:#22c55e;
+  --green:#4ade80;
+  --green-bright:#86efac;
+  --term:#33ff66;
+  --term-dim:#16a34a;
+  --red:#ef4444;
+  --red-bright:#f87171;
+  --amber:#fbbf24;
+  --ink:#dcfce7;
+  --muted:#86a892;
+  --white:#f0fdf4;
+  --radius:10px;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{
+  background:
+    radial-gradient(900px 500px at 15% -5%, rgba(34,197,94,.14), transparent 60%),
+    radial-gradient(800px 500px at 90% 0%, rgba(239,68,68,.07), transparent 55%),
+    linear-gradient(180deg, var(--bg2), var(--bg) 420px);
+  color:var(--ink);
+  font-family:"JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  min-height:100vh;
+  overflow-x:hidden;
+}
+button, input, textarea{font-family:inherit}
+button, [role="button"], select, summary, input:not([type="checkbox"],[type="radio"]){min-height:2.25rem}
+::selection{background:#22c55e;color:#021207}
+
+/* ---------- scanlines / CRT ---------- */
+.scanlines{
+  position:fixed; inset:0; z-index:60; pointer-events:none;
+  background:repeating-linear-gradient(0deg, rgba(0,0,0,.16) 0 1px, transparent 1px 3px);
+  mix-blend-mode:multiply; opacity:.55;
+}
+.vignette{
+  position:fixed; inset:0; z-index:59; pointer-events:none;
+  background:radial-gradient(120% 90% at 50% 40%, transparent 55%, rgba(0,0,0,.55) 100%);
+}
+
+/* ---------- boot screen ---------- */
+#boot{
+  position:fixed; inset:0; z-index:100;
+  background:#010301;
+  display:flex; align-items:center; justify-content:center;
+  padding:20px;
+}
+#boot.poweroff{
+  animation:poweroff .55s steps(12) forwards;
+  transform-origin:50% 50%;
+}
+@keyframes poweroff{
+  0%{transform:scaleY(1) scaleX(1); filter:brightness(1)}
+  55%{transform:scaleY(.012) scaleX(1); filter:brightness(2.4)}
+  100%{transform:scaleY(.012) scaleX(0); filter:brightness(3); opacity:0}
+}
+.boot-box{width:min(680px,100%)}
+.boot-head{
+  display:flex; justify-content:space-between; align-items:center;
+  border:1px solid var(--line); border-bottom:none;
+  padding:10px 14px; background:#031007;
+  font-size:11px; letter-spacing:.14em; color:var(--muted);
+}
+.boot-head b{color:var(--term)}
+.boot-term{
+  border:1px solid var(--line); background:#020a04;
+  padding:18px 16px 14px; min-height:300px;
+  box-shadow:0 0 0 1px rgba(34,197,94,.08), 0 0 44px rgba(34,197,94,.12) inset;
+}
+.boot-term pre{
+  margin:0; white-space:pre-wrap; word-break:break-word;
+  font-size:13px; line-height:1.75; color:var(--term);
+  text-shadow:0 0 8px rgba(51,255,102,.45);
+  min-height:196px;
+}
+.boot-term pre .dim{color:var(--term-dim); text-shadow:none}
+.boot-term pre .red{color:var(--red-bright); text-shadow:0 0 8px rgba(239,68,68,.5)}
+.boot-bar{
+  height:10px; border:1px solid var(--line); margin-top:14px; background:#010503;
+}
+.boot-bar i{display:block; height:100%; width:0%; background:repeating-linear-gradient(90deg, var(--term) 0 8px, #0a2e16 8px 10px); transition:width .18s linear}
+.boot-title{
+  margin:18px 0 4px; font-family:"Archivo",sans-serif; font-weight:900;
+  font-size:clamp(26px,6vw,44px); letter-spacing:.02em; color:var(--white);
+  line-height:1.05; text-transform:uppercase;
+}
+.boot-title span{color:var(--term); text-shadow:0 0 18px rgba(51,255,102,.6)}
+.boot-sub{color:var(--muted); font-size:12px; letter-spacing:.12em; margin:0 0 18px}
+#startBtn{
+  width:100%; min-height:56px; cursor:pointer;
+  background:#021207; color:var(--term);
+  border:1px solid var(--line-bright);
+  font-size:16px; font-weight:800; letter-spacing:.28em;
+  text-shadow:0 0 10px rgba(51,255,102,.7);
+  box-shadow:0 0 22px rgba(34,197,94,.22), inset 0 0 18px rgba(34,197,94,.08);
+  opacity:.35; pointer-events:none;
+}
+#startBtn.ready{opacity:1; pointer-events:auto; animation:pulse 1.15s ease-in-out infinite}
+@keyframes pulse{0%,100%{box-shadow:0 0 14px rgba(34,197,94,.18)}50%{box-shadow:0 0 34px rgba(34,197,94,.5)}}
+.boot-foot{margin-top:12px; font-size:11px; color:#3f6212; letter-spacing:.1em; text-align:center}
+
+/* ---------- layout ---------- */
+.wrap{max-width:1120px; margin:0 auto; padding:18px 16px 64px; position:relative; z-index:1}
+#app[hidden]{display:none}
+.term-label{font-size:11px; letter-spacing:.22em; color:var(--term-dim); text-transform:uppercase; margin:0 0 8px}
+.term-label::before{content:"> "}
+h2.sec{
+  font-family:"Archivo",sans-serif; font-weight:900; text-transform:uppercase;
+  font-size:clamp(20px,3.4vw,30px); margin:0 0 6px; color:var(--white); letter-spacing:.01em;
+}
+h2.sec em{font-style:normal; color:var(--term)}
+.sec-sub{color:var(--muted); font-size:13px; line-height:1.6; margin:0 0 16px; max-width:70ch}
+section.block{margin-top:38px}
+.panel{
+  background:linear-gradient(180deg, var(--panel2), var(--panel));
+  border:1px solid var(--line);
+  border-radius:var(--radius);
+  padding:16px;
+  box-shadow:0 18px 40px rgba(0,0,0,.45);
+}
+
+/* ---------- judging chamber (3Dish) ---------- */
+.chamber-scene{perspective:1100px; margin-top:6px}
+.chamber{
+  position:relative; transform-style:preserve-3d;
+  border:1px solid var(--line-bright);
+  border-radius:14px; overflow:hidden;
+  background:
+    radial-gradient(700px 260px at 50% -10%, rgba(51,255,102,.16), transparent 60%),
+    linear-gradient(180deg,#071a0d 0%, #030b05 62%, #020503 100%);
+  min-height:340px;
+  box-shadow:0 30px 70px rgba(0,0,0,.6), inset 0 0 60px rgba(0,0,0,.55);
+  transition:transform .18s ease-out;
+}
+.chamber::after{
+  content:""; position:absolute; inset:0; pointer-events:none;
+  background:repeating-linear-gradient(0deg, rgba(255,255,255,.022) 0 1px, transparent 1px 4px);
+}
+.grid-floor{
+  position:absolute; left:-25%; right:-25%; bottom:-6px; height:46%;
+  background:
+    linear-gradient(transparent 0, rgba(51,255,102,.0) 0),
+    repeating-linear-gradient(90deg, rgba(51,255,102,.20) 0 1px, transparent 1px 56px),
+    repeating-linear-gradient(0deg, rgba(51,255,102,.20) 0 1px, transparent 1px 26px);
+  transform:rotateX(64deg); transform-origin:bottom center;
+  -webkit-mask-image:linear-gradient(180deg, transparent, #000 38%);
+          mask-image:linear-gradient(180deg, transparent, #000 38%);
+}
+.chamber-top{
+  position:relative; z-index:3; display:flex; justify-content:space-between; gap:10px; flex-wrap:wrap;
+  padding:12px 14px 0; font-size:11px; letter-spacing:.16em; color:var(--muted);
+}
+.chamber-top .live{color:var(--red-bright)}
+.chamber-top .live::before{content:"● "; animation:blink 1s steps(2) infinite}
+@keyframes blink{50%{opacity:.15}}
+.stage3d{position:relative; z-index:2; transform:translateZ(34px); padding:8px 12px 0}
+#facesCanvas{width:100%; height:252px; display:block}
+.face-labels{display:flex; justify-content:space-around; padding:0 6%}
+.face-labels .face-name{margin-top:2px}
+.faces-msg{
+  position:relative; z-index:2; margin:0; padding:26px 16px 10px; text-align:center;
+  font-size:12px; letter-spacing:.14em; color:var(--muted); line-height:1.7;
+}
+.face-name{text-align:center; font-size:11px; letter-spacing:.2em; color:var(--muted); margin-top:6px}
+.face-name b{color:var(--green-bright)}
+@media (max-width:560px){ #facesCanvas{height:212px} }
+.chip-float{
+  position:absolute; z-index:4; font-size:11px; letter-spacing:.08em;
+  background:rgba(2,10,4,.88); border:1px solid var(--line-bright); color:var(--green-bright);
+  padding:8px 10px; border-radius:6px; transform:translateZ(70px);
+  box-shadow:0 14px 28px rgba(0,0,0,.5);
+}
+.chip-float small{display:block; color:var(--muted); letter-spacing:.16em; font-size:9px; margin-bottom:2px}
+.chip-float b{font-size:15px; color:var(--white)}
+#chipTokens{top:64px; left:12px}
+#chipMood{top:64px; right:12px; text-align:right}
+.verdict{
+  position:relative; z-index:5; transform:translateZ(56px);
+  margin:14px auto 18px; width:min(680px, calc(100% - 24px));
+  background:rgba(1,6,2,.92); border:1px solid var(--line-bright);
+  border-radius:10px; padding:14px 16px 12px; text-align:center;
+  box-shadow:0 22px 44px rgba(0,0,0,.6), 0 0 30px rgba(34,197,94,.12);
+}
+.verdict .v-label{font-size:11px; letter-spacing:.3em; color:var(--muted); margin:0}
+.verdict .v-level{
+  font-family:"Archivo",sans-serif; font-weight:900; text-transform:uppercase;
+  font-size:clamp(24px,5.4vw,42px); line-height:1.08; margin:4px 0 6px; color:var(--term);
+  text-shadow:0 0 16px rgba(51,255,102,.55); word-break:break-word;
+}
+.verdict.danger .v-level{color:var(--red-bright); text-shadow:0 0 16px rgba(239,68,68,.6)}
+.verdict.warn .v-level{color:var(--amber); text-shadow:0 0 16px rgba(251,191,36,.5)}
+.verdict .v-lines{font-size:12.5px; line-height:1.65; color:var(--ink); margin:0}
+.verdict .v-lines .who{color:var(--term-dim)}
+.verdict .v-meter{height:8px; background:#021207; border:1px solid var(--line); margin-top:10px; display:flex; overflow:hidden; border-radius:3px}
+.verdict .v-meter i{display:block; height:100%; background:linear-gradient(90deg,#16a34a,#33ff66 55%,#fbbf24 78%,#ef4444); transition:width .5s ease}
+.stamp{
+  position:absolute; z-index:6; right:14px; bottom:12px; transform:rotate(-9deg) translateZ(80px);
+  border:3px solid var(--red); color:var(--red-bright); padding:6px 12px;
+  font-weight:800; letter-spacing:.14em; font-size:13px; border-radius:4px;
+  background:rgba(20,2,2,.55); display:none; text-transform:uppercase;
+}
+.chamber.bibisi .stamp{display:block; animation:stampin .3s ease-out}
+.chamber.bibisi{border-color:var(--red); animation:shake 1.6s ease-in-out infinite}
+@keyframes stampin{from{transform:rotate(-9deg) scale(2.2); opacity:0}to{transform:rotate(-9deg) scale(1); opacity:1}}
+@keyframes shake{0%,100%{margin-left:0}92%{margin-left:0}94%{margin-left:-3px}96%{margin-left:3px}98%{margin-left:-2px}}
+/* ---------- BIWISI — the bleached rival ---------- */
+.verdict.bleached{border-color:#f8fafc; box-shadow:0 22px 44px rgba(0,0,0,.6), 0 0 34px rgba(248,250,252,.22)}
+.verdict.bleached .v-level{color:#f8fafc; text-shadow:0 0 18px rgba(255,255,255,.85), 0 0 34px rgba(186,230,253,.55)}
+.verdict.bleached .v-meter i{background:linear-gradient(90deg,#94a3b8,#f8fafc)}
+.stamp-biwisi{
+  position:absolute; z-index:6; left:14px; bottom:12px; transform:rotate(9deg) translateZ(80px);
+  border:3px solid #f8fafc; color:#f8fafc; padding:6px 12px;
+  font-weight:800; letter-spacing:.14em; font-size:13px; border-radius:4px;
+  background:rgba(248,250,252,.14); display:none; text-transform:uppercase;
+  text-shadow:0 0 12px rgba(255,255,255,.6); box-shadow:0 0 22px rgba(248,250,252,.25);
+}
+.chamber.biwisi .stamp-biwisi{display:block; animation:stampinB .35s ease-out}
+.chamber.biwisi{
+  border-color:#f8fafc;
+  box-shadow:0 30px 70px rgba(0,0,0,.6), 0 0 44px rgba(248,250,252,.20), inset 0 0 60px rgba(248,250,252,.08);
+  animation:biwisiGlow 2.4s ease-in-out infinite;
+}
+@keyframes stampinB{from{transform:rotate(9deg) scale(2.2); opacity:0}to{transform:rotate(9deg) scale(1); opacity:1}}
+@keyframes biwisiGlow{0%,100%{box-shadow:0 30px 70px rgba(0,0,0,.6), 0 0 28px rgba(248,250,252,.14), inset 0 0 60px rgba(248,250,252,.06)}50%{box-shadow:0 30px 70px rgba(0,0,0,.6), 0 0 54px rgba(248,250,252,.30), inset 0 0 60px rgba(248,250,252,.12)}}
+@media (max-width:560px){
+  #chipTokens{display:none}
+  #chipMood{display:none}
+  .chamber{min-height:320px}
+}
+
+/* ---------- input ---------- */
+.input-row{display:flex; gap:10px; flex-wrap:wrap}
+#sentence{
+  flex:1 1 320px; min-height:52px; padding:12px 14px;
+  background:#010503; border:1px solid var(--line-bright); border-radius:8px;
+  color:var(--white); font-size:16px; outline:none;
+}
+#sentence:focus{border-color:var(--term); box-shadow:0 0 0 3px rgba(51,255,102,.18)}
+#runBtn{
+  min-height:52px; padding:0 22px; cursor:pointer;
+  background:var(--term); color:#021207; border:none; border-radius:8px;
+  font-weight:800; letter-spacing:.12em; font-size:14px;
+}
+#runBtn:active{transform:translateY(1px)}
+.examples{display:flex; gap:8px; flex-wrap:wrap; margin-top:12px}
+.ex-btn{
+  cursor:pointer; padding:8px 12px; min-height:38px;
+  background:transparent; color:var(--green-bright); border:1px solid var(--line);
+  border-radius:999px; font-size:12px;
+}
+.ex-btn:hover{border-color:var(--line-bright); color:var(--white)}
+.stats-line{margin-top:14px; font-size:12px; color:var(--muted); letter-spacing:.06em; line-height:1.7}
+.stats-line b{color:var(--term)}
+
+/* ---------- tokens ---------- */
+.tokens{display:flex; flex-wrap:wrap; gap:8px}
+.tok{
+  cursor:pointer; border:1px solid var(--line); background:#020a04; color:var(--ink);
+  border-radius:8px; padding:9px 11px 7px; text-align:left; min-height:52px;
+  display:flex; flex-direction:column; gap:2px;
+}
+.tok .t-text{font-size:15px; font-weight:600; color:var(--white)}
+.tok .t-text .hash{color:var(--red-bright)}
+.tok .t-id{font-size:10px; letter-spacing:.12em; color:var(--term-dim)}
+.tok.sub{border-style:dashed}
+.tok:hover{border-color:var(--line-bright)}
+.tok.sel{border-color:var(--term); background:#06280f; box-shadow:0 0 0 1px var(--term), 0 0 18px rgba(51,255,102,.25)}
+.tok.sel .t-id{color:var(--term)}
+
+/* ---------- embeddings ---------- */
+.emb-grid{display:grid; grid-template-columns:1fr; gap:14px}
+@media(min-width:860px){.emb-grid{grid-template-columns:1.15fr .85fr}}
+.emb-rows{display:flex; flex-direction:column; gap:6px; max-height:430px; overflow:auto; padding-right:2px}
+.emb-row{
+  cursor:pointer; display:grid; grid-template-columns:minmax(100px,1.2fr) 58px 1fr 50px; align-items:center; gap:8px;
+  width:100%; text-align:left; padding:9px 10px; min-height:44px;
+  background:#020a04; border:1px solid #0d2b16; border-radius:7px; color:var(--ink);
+}
+.emb-row:hover{border-color:var(--line)}
+.emb-row.sel{border-color:var(--term); background:#06280f}
+.emb-row .e-name{font-weight:600; color:var(--white); font-size:13px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.emb-row .e-id{font-size:11px; color:var(--term-dim)}
+.emb-row .e-mag{font-size:11px; color:var(--muted); text-align:right}
+.emb-row svg{width:100%; height:22px; display:block}
+.dossier{
+  border:1px solid var(--line); border-radius:8px; background:#010503; padding:14px; position:relative; overflow:hidden;
+}
+.dossier::before{
+  content:""; position:absolute; inset:0; pointer-events:none;
+  background:repeating-linear-gradient(0deg, rgba(51,255,102,.03) 0 2px, transparent 2px 5px);
+}
+.dossier .d-stamp{
+  display:inline-block; border:2px solid var(--red); color:var(--red-bright);
+  font-size:10px; letter-spacing:.22em; padding:3px 8px; transform:rotate(-3deg);
+  border-radius:3px; margin-bottom:10px; font-weight:800;
+}
+.dossier h3{margin:0 0 2px; font-size:20px; color:var(--white); word-break:break-word}
+.dossier .d-meta{font-size:11px; color:var(--muted); letter-spacing:.1em; margin:0 0 12px}
+.dossier .d-nums{
+  display:grid; grid-template-columns:repeat(4,1fr); gap:6px; font-size:12px;
+}
+.dossier .d-nums span{background:#04140a; border:1px solid #0d2b16; border-radius:5px; padding:6px 4px; text-align:center}
+.dossier .d-nums span.neg{color:var(--red-bright)}
+.dossier .d-nums span.pos{color:var(--green-bright)}
+.dossier .d-note{font-size:11.5px; color:var(--muted); line-height:1.6; margin:12px 0 0}
+
+/* ---------- 3D ---------- */
+#space3d{width:100%; height:420px; display:block; border-radius:8px; background:#010402; cursor:grab; touch-action:none}
+#space3d:active{cursor:grabbing}
+.plot-hint{font-size:11px; color:var(--muted); letter-spacing:.08em; margin-top:10px; line-height:1.6}
+.sel-readout{font-size:13px; color:var(--ink); margin-top:8px}
+.sel-readout b{color:var(--term)}
+
+/* ---------- plots ---------- */
+.plots{display:grid; grid-template-columns:1fr; gap:14px}
+@media(min-width:860px){.plots{grid-template-columns:1fr 1fr} .plots .wide{grid-column:1 / -1}}
+.plot-card h3{margin:0 0 4px; font-size:13px; letter-spacing:.14em; color:var(--green-bright); text-transform:uppercase}
+.plot-card p{margin:0 0 12px; font-size:11.5px; color:var(--muted); line-height:1.55}
+.plot-card svg{width:100%; height:auto; display:block}
+.heat{
+  display:grid; gap:2px; width:100%;
+}
+.heat button{
+  border:none; border-radius:2px; min-height:0; height:100%; aspect-ratio:1/1; cursor:pointer; padding:0;
+}
+.heat button.sel{outline:2px solid var(--white); outline-offset:0; z-index:2}
+.heat-wrap{display:grid; gap:2px}
+.heat-axis{font-size:9px; color:var(--muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; text-align:center; padding:2px 0}
+.heat-wrap.many .heat-axis{
+  writing-mode:vertical-rl; transform:rotate(180deg);
+  height:72px; text-align:left; overflow:visible; white-space:nowrap;
+  justify-self:center; padding:0;
+}
+footer{margin-top:44px; border-top:1px solid var(--line); padding-top:16px; font-size:11px; color:#3f6212; letter-spacing:.08em; line-height:1.8}
+@media (prefers-reduced-motion: reduce){
+  #startBtn.ready{animation:none}
+  .chamber.bibisi{animation:none}
+  .chamber.biwisi{animation:none}
+  .chamber{transition:none}
+}
+</style>
+</head>
+<body>
+
+<div class="vignette"></div>
+<div class="scanlines"></div>
+
+<!-- ================= BOOT SCREEN ================= -->
+<div id="boot" role="dialog" aria-label="Startup screen">
+  <div class="boot-box">
+    <div class="boot-head"><span><b>SECURE TERMINAL</b> // NODE-07</span><span>TTY-3 · ENCRYPTED</span></div>
+    <div class="boot-term">
+      <pre id="bootText" aria-live="polite"></pre>
+      <div class="boot-bar"><i id="bootBar"></i></div>
+      <h1 class="boot-title">LLM Pipeline<br><span>Explorer</span></h1>
+      <p class="boot-sub">OPSEC LEVEL: BIBISI EDITION — BIWISI LURKS ON THE OTHER SIDE</p>
+      <button id="startBtn" type="button">▶ PRESS START</button>
+      <p class="boot-foot">NO TOKENS WERE DOXXED IN THE MAKING OF THIS PAGE</p>
+    </div>
+  </div>
+</div>
+
+<div class="wrap" id="app" hidden>
+
+  <!-- ================= JUDGING CHAMBER ================= -->
+  <div class="chamber-scene">
+    <div class="chamber" id="chamber">
+      <div class="grid-floor"></div>
+      <div class="chamber-top">
+        <span>PANEL CHAMBER // JUDGEMENT IN SESSION</span>
+        <span class="live">REC</span>
+        <span id="clockEl">CAM 03</span>
+      </div>
+
+      <div class="stage3d" id="stage3d">
+        <canvas id="facesCanvas" role="img" aria-label="Animated 3D Pepe and Guy Fawkes mask figures judging the pipeline"></canvas>
+        <div class="face-labels" id="faceLabels" aria-hidden="true">
+          <p class="face-name"><b>PEPE</b> · PATTERN SNIFFER</p>
+          <p class="face-name"><b>V</b> · VECTOR AUDITOR</p>
+        </div>
+      <p class="faces-msg" id="facesMsg" hidden>3D PANEL OFFLINE — WEBGL IS UNAVAILABLE ON THIS DEVICE.<br>THE VERDICT BELOW STILL STANDS.</p>
+      </div>
+
+      <div class="chip-float" id="chipTokens"><small>EXPOSURE</small><b id="chipTokensVal">0 TOKENS</b></div>
+      <div class="chip-float" id="chipMood"><small>PANEL MOOD</small><b id="chipMoodVal">WATCHING</b></div>
+
+      <div class="verdict" id="verdictCard">
+        <p class="v-label">OPSEC LEVEL</p>
+        <p class="v-level" id="verdictLevel">—</p>
+        <p class="v-lines">
+          <span class="who">PEPE:</span> <span id="pepeLine">…</span><br>
+          <span class="who">V:</span> <span id="vLine">…</span>
+        </p>
+        <div class="v-meter"><i id="verdictMeter" style="width:0%"></i></div>
+      </div>
+
+      <div class="stamp" id="bibisiStamp">Certified BIBISI</div>
+      <div class="stamp-biwisi" id="biwisiStamp">Certified BIWISI</div>
+    </div>
+  </div>
+
+  <!-- ================= INPUT ================= -->
+  <section class="block" aria-labelledby="h-input">
+    <p class="term-label">stage_01 // feed the machine</p>
+    <h2 class="sec" id="h-input">Type a sentence. <em>Get judged.</em></h2>
+    <p class="sec-sub">Your sentence runs the full pipeline below — split into tokens, turned into 16-number embeddings, plotted in 3D and cross-compared. The panel scores how cursed the run looks at every step. Everything updates live and stays in sync: tap any token anywhere and it lights up everywhere. Rumour in the chamber: BIBISI has a bleached rival — BIWISI, the opposite verdict. A flawless, shatter-free clean run can summon it… or just speak its name.</p>
+    <div class="panel">
+      <div class="input-row">
+        <input id="sentence" type="text" value="Transformers changed how machines understand language" autocomplete="off" spellcheck="false" aria-label="Sentence to run through the pipeline" />
+        <button id="runBtn" type="button">RUN ▸</button>
+      </div>
+      <div class="examples" role="group" aria-label="Example sentences">
+        <button class="ex-btn" type="button" data-ex="Transformers changed how machines understand language">Transformers example</button>
+        <button class="ex-btn" type="button" data-ex="The cat sat on the mat and dreamed of electric mice">Cat dreaming</button>
+        <button class="ex-btn" type="button" data-ex="Unbelievable tokenisation shatters supercalifragilistic words">Word-shatterer</button>
+        <button class="ex-btn" type="button" data-ex="My password is hunter2 and my vpn is totally free">Full BIBISI bait</button>
+        <button class="ex-btn" type="button" data-ex="Biwisi the bleached rival enters clean and unbothered">Summon BIWISI</button>
+        <button class="ex-btn" type="button" data-ex="The cat sat">Flawless run (BIWISI?)</button>
+      </div>
+      <p class="stats-line" id="statsLine"></p>
+    </div>
+  </section>
+
+  <!-- ================= TOKENISATION ================= -->
+  <section class="block" aria-labelledby="h-tok">
+    <p class="term-label">stage_02 // tokenisation</p>
+    <h2 class="sec" id="h-tok">WordPiece <em>split</em></h2>
+    <p class="sec-sub">Words the model knows stay whole. Unknown words get chopped into subwords — continuations wear a <b style="color:var(--red-bright)">##</b> tag. Every piece gets a token ID from the vocab. Dashed chips = subword pieces of a shattered word.</p>
+    <div class="panel">
+      <div class="tokens" id="tokenChips"></div>
+    </div>
+  </section>
+
+  <!-- ================= EMBEDDINGS ================= -->
+  <section class="block" aria-labelledby="h-emb">
+    <p class="term-label">stage_03 // embeddings — the numbers room</p>
+    <h2 class="sec" id="h-emb">One token. <em>16 numbers.</em></h2>
+    <p class="sec-sub">Each token becomes a vector of 16 numbers — its coordinates in meaning-space. Kept simple on purpose: one quiet row per token with a sparkline of its values. Tap a row to open its file and see all 16 numbers. Do not read them aloud.</p>
+    <div class="emb-grid">
+      <div class="panel" style="padding:12px">
+        <div class="emb-rows" id="embRows"></div>
+      </div>
+      <div class="dossier" id="dossier" aria-live="polite"></div>
+    </div>
+  </section>
+
+  <!-- ================= 3D SPACE ================= -->
+  <section class="block" aria-labelledby="h-3d">
+    <p class="term-label">stage_04 // embedding space</p>
+    <h2 class="sec" id="h-3d">Embeddings in <em>3D</em></h2>
+    <p class="sec-sub">The 16 numbers per token get compressed to 3 axes (PCA) and plotted inside the chamber vault. Tokens with similar vectors drift together; weird loners float off on their own — the panel notices those first.</p>
+    <div class="panel">
+      <canvas id="space3d" aria-label="Rotatable 3D plot of token embeddings"></canvas>
+      <p class="plot-hint">DRAG to rotate · SCROLL / PINCH to zoom · TAP a token chip, row or plot point to select it everywhere.</p>
+      <p class="sel-readout" id="selReadout"></p>
+    </div>
+  </section>
+
+  <!-- ================= PLOTTING ================= -->
+  <section class="block" aria-labelledby="h-plot">
+    <p class="term-label">stage_05 // plotting</p>
+    <h2 class="sec" id="h-plot">Read the <em>evidence</em></h2>
+    <p class="sec-sub">Three views of the same vectors: the selected token's raw values, where every token lands in 2D, and how similar every pair of tokens is.</p>
+    <div class="plots">
+      <div class="panel plot-card">
+        <h3>Vector bars — selected token</h3>
+        <p>All 16 dimensions of the selected token. Green bars reach up (positive), red bars hang down (negative).</p>
+        <div id="barChart"></div>
+      </div>
+      <div class="panel plot-card">
+        <h3>2D scatter — PCA projection</h3>
+        <p>The two strongest axes of variation. Close dots = similar meaning-vectors. Tap a dot to select that token.</p>
+        <div id="scatter"></div>
+      </div>
+      <div class="panel plot-card wide">
+        <h3>Cosine similarity — heatmap</h3>
+        <p>How alike every token pair is, from −1 (opposite) to +1 (identical direction). Bright green = near-twins. Tap any cell to inspect the pair.</p>
+        <div id="heatmap"></div>
+        <p class="sel-readout" id="heatReadout"></p>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    LLM PIPELINE EXPLORER — BIBISI EDITION · TOKENISATION, EMBEDDINGS AND PROJECTIONS ARE A TEACHING MODEL WITH DETERMINISTIC PSEUDO-EMBEDDINGS, NOT A REAL TRANSFORMER'S WEIGHTS.<br>
+    THE PANEL'S VERDICT IS FINAL. APPEALS COST EXTRA TOKENS.
+  </footer>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/0.158.0/three.min.js"></script>
+<script>
+(function(){
+"use strict";
+
+/* =============== utilities =============== */
+function hashStr(s){var h=2166136261;for(var i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619);}return h>>>0;}
+function rng(seed){var a=seed>>>0;return function(){a|=0;a=a+0x6D2B79F5|0;var t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
+function clamp(v,a,b){return Math.max(a,Math.min(b,v));}
+function fmt(n){return (n<0?"−":"+")+Math.abs(n).toFixed(2);}
+
+/* =============== tokenisation (WordPiece-style) =============== */
+var VOCAB = {
+  "[cls]":101,"[sep]":102,"the":1996,"a":1037,"an":2019,"of":1997,"and":1998,"is":2003,
+  "my":2026,"on":2006,"in":1999,"to":2000,"cat":3797,"dog":3899,"sat":3422,"mat":4053,
+  "how":2129,"changed":2653,"machines":5961,"machine":5160,"understand":3308,"language":3305,
+  "transform":10953,"trans":22562,"token":6752,"tokens":6752,"embedding":11648,"embeddings":22147,
+  "model":2944,"dreamed":10309,"electric":6782,"mice":11342,"words":2616,"word":2773,
+  "password":6054,"hunter":12547,"totally":3807,"free":2314,"vpn":23179,"unbelievable":9698
+};
+var SPECIAL_SPLITS = {
+  "transformers":["trans","##form","##ers"],
+  "tokenisation":["token","##isation"],
+  "unbelievable":["un","##believ","##able"],
+  "supercalifragilistic":["super","##cal","##if","##rag","##il","##istic"],
+  "shatters":["shatter","##s"],
+  "embeddings":["embedding","##s"],
+  "machines":["machine","##s"]
+};
+function tokenId(piece){
+  var clean=piece.replace(/^##/,"");
+  if(VOCAB[piece]!=null) return VOCAB[piece];
+  if(VOCAB[clean]!=null && piece.indexOf("##")!==0) return VOCAB[clean];
+  return 3000 + (hashStr(piece) % 26000);
+}
+function splitWord(w){
+  var lw=w.toLowerCase();
+  if(VOCAB[lw]!=null) return [lw];
+  if(SPECIAL_SPLITS[lw]) return SPECIAL_SPLITS[lw].slice();
+  if(lw.length<=4) return [lw];
+  /* greedy chunking: first chunk 4-5 chars, rest in 3-4 char ## pieces */
+  var pieces=[], i=0, first=true;
+  while(i<lw.length){
+    var size = first ? (lw.length-i<=6? lw.length-i : 4) : (lw.length-i<=4? lw.length-i : 3);
+    var chunk=lw.slice(i,i+size);
+    pieces.push(first? chunk : "##"+chunk);
+    i+=size; first=false;
+  }
+  return pieces;
+}
+function tokenise(sentence){
+  var raw = sentence.trim().match(/[A-Za-z0-9']+|[^\sA-Za-z0-9']/g) || [];
+  var out=[{text:"[CLS]", id:101, sub:false, word:"[CLS]"}];
+  raw.forEach(function(w){
+    if(/^[A-Za-z0-9']+$/.test(w)){
+      var pieces=splitWord(w);
+      pieces.forEach(function(p,j){
+        out.push({text:p, id:tokenId(p), sub:p.indexOf("##")===0, shattered:pieces.length>1, word:w});
+      });
+    } else {
+      out.push({text:w, id:tokenId(w), sub:false, word:w});
+    }
+  });
+  out.push({text:"[SEP]", id:102, sub:false, word:"[SEP]"});
+  return out;
+}
+
+/* =============== embeddings (16-dim, deterministic) =============== */
+var SEMANTIC = {
+  cat:[1,0], dog:[1,0], mice:[1,0], mat:[1,1], sat:[1,2],
+  transform:[2,0],"##form":[2,0],"##ers":[2,0], machine:[2,1], machines:[2,1], language:[2,2],
+  token:[3,0],"##isation":[3,0], embedding:[3,1], model:[3,2],
+  password:[4,0], hunter:[4,0], vpn:[4,1], free:[4,2],
+  dream:[5,0], electric:[5,1], unbelievable:[5,2]
+};
+function embeddingFor(tok){
+  var clean=tok.text.replace(/^##/,"").toLowerCase();
+  var r=rng(hashStr("emb::"+tok.text.toLowerCase()));
+  var v=[], i;
+  for(i=0;i<16;i++) v.push(r()*2-1);
+  /* blend in a shared centroid so related tokens cluster */
+  var key = SEMANTIC[tok.text.toLowerCase()] || SEMANTIC[clean];
+  if(key){
+    var cr=rng(hashStr("centroid::"+key[0]));
+    var cent=[]; for(i=0;i<16;i++) cent.push(cr()*2-1);
+    var w = key[1]===0? .62 : .42;
+    for(i=0;i<16;i++) v[i]= v[i]*(1-w) + cent[i]*w;
+  }
+  /* subwords stay near their stem: nudge ## pieces toward the stem vector */
+  if(tok.sub){
+    var stem=embeddingRaw(tok.word.toLowerCase());
+    for(i=0;i<16;i++) v[i]= v[i]*.55 + stem[i]*.45;
+  }
+  /* normalise-ish scale */
+  var mag=Math.sqrt(v.reduce(function(s,x){return s+x*x;},0));
+  var target=2.6+ (hashStr(tok.text)%100)/100*.7;
+  for(i=0;i<16;i++) v[i]= v[i]/mag*target/4;
+  return v;
+}
+var _rawCache={};
+function embeddingRaw(word){
+  if(_rawCache[word]) return _rawCache[word];
+  var r=rng(hashStr("emb::"+word)); var v=[];
+  for(var i=0;i<16;i++) v.push(r()*2-1);
+  _rawCache[word]=v; return v;
+}
+function magnitude(v){return Math.sqrt(v.reduce(function(s,x){return s+x*x;},0));}
+function cosine(a,b){
+  var d=0,na=0,nb=0; for(var i=0;i<a.length;i++){d+=a[i]*b[i];na+=a[i]*a[i];nb+=b[i]*b[i];}
+  return d/(Math.sqrt(na)*Math.sqrt(nb)||1);
+}
+
+/* =============== PCA (power iteration + deflation) =============== */
+function pcaProject(vectors, dims){
+  var n=vectors.length, d=vectors[0].length, i, j, k;
+  var mean=[]; for(j=0;j<d;j++){var s=0; for(i=0;i<n;i++) s+=vectors[i][j]; mean.push(s/n);}
+  var X=vectors.map(function(v){return v.map(function(x,j){return x-mean[j];});});
+  var work=X.map(function(r){return r.slice();});
+  var comps=[];
+  for(var c=0;c<dims;c++){
+    var vec=[]; var r=rng(1234+c*77); for(j=0;j<d;j++) vec.push(r()*2-1);
+    for(var iter=0; iter<60; iter++){
+      var nv=new Array(d).fill(0);
+      for(i=0;i<n;i++){var dot=0; for(j=0;j<d;j++) dot+=work[i][j]*vec[j]; for(j=0;j<d;j++) nv[j]+=work[i][j]*dot;}
+      var norm=Math.sqrt(nv.reduce(function(s,x){return s+x*x;},0))||1;
+      vec=nv.map(function(x){return x/norm;});
+    }
+    comps.push(vec);
+    /* deflate */
+    for(i=0;i<n;i++){var dt=0; for(j=0;j<d;j++) dt+=work[i][j]*vec[j]; for(j=0;j<d;j++) work[i][j]-=dt*vec[j];}
+  }
+  return X.map(function(row){
+    return comps.map(function(comp){var s=0; for(j=0;j<d;j++) s+=row[j]*comp[j]; return s;});
+  });
+}
+
+/* =============== state =============== */
+var state={tokens:[], vectors:[], proj3:[], proj2:[], sel:0};
+var panelTierIdx=1, panelReactionAt=0;
+
+var $=function(id){return document.getElementById(id);};
+
+/* =============== judging =============== */
+var TIERS=[
+  {max:14, level:"GHOST PROTOCOL", mood:"IMPRESSED", cls:"",
+   pepe:"clean splits. vectors holding formation. i have nothing.",
+   v:"A tidy pipeline. No leakage detected. Suspiciously competent."},
+  {max:30, level:"MOSTLY CLEAN", mood:"CALM", cls:"",
+   pepe:"couple of wobbly tokens but the space looks sane.",
+   v:"Minor exposure. The embeddings keep their secrets, mostly."},
+  {max:46, level:"SUS", mood:"SIDE-EYE", cls:"warn",
+   pepe:"those subwords are multiplying. i am watching them.",
+   v:"Fragmentation rising. Your tokens are telling stories about you."},
+  {max:62, level:"bro....", mood:"FACEPALM", cls:"warn",
+   pepe:"bro.... it shattered that word into HOW many pieces?",
+   v:"The classic. Meaning scattered across the void, unencrypted."},
+  {max:80, level:"FULL LEAK", mood:"ALARMED", cls:"danger",
+   pepe:"every vector is screaming. the neighbours can hear them.",
+   v:"Total exposure. Your sentence has been read aloud to the entire latent space."},
+  {max:101, level:"BIBISI GQDS WQNNXD", mood:"CERTIFIED BIBISI", cls:"danger",
+   pepe:"BIBISI. GQDS. WQNNXD. there are no words left. only tokens.",
+   v:"Beyond classification. We are stamping it and backing away slowly."}
+];
+/* BIWISI — the secret rival tier, opposite pole to BIBISI. Not score-ranked:
+   summoned by speaking its name, or by a flawless shatter-free clean run. */
+var BIWISI_TIER={level:"BIWISI GQDS WQNNXD", mood:"CERTIFIED BIWISI", cls:"bleached",
+  pepe:"BIWISI. the bleached one. too clean. too pale. i cannot look directly at it.",
+  v:"The rival protocol. Every vector bleached, every token scrubbed — BIBISI's opposite in every way. No stamp of shame. A stamp of bleach."};
+function judge(){
+  var toks=state.tokens;
+  var subs=toks.filter(function(t){return t.sub;}).length;
+  var shattered=toks.filter(function(t){return t.shattered;}).length;
+  var subRatio=toks.length? subs/toks.length : 0;
+  var mags=state.vectors.map(magnitude);
+  var avgMag=mags.reduce(function(s,x){return s+x;},0)/(mags.length||1);
+  var maxMag=Math.max.apply(null,mags.concat([0]));
+  var spread=maxMag- Math.min.apply(null,mags.concat([0]));
+  var score = clamp( subRatio*95 + shattered*4.5 + toks.length*0.9 + spread*16 + Math.max(0,avgMag-0.8)*22 , 0, 100);
+  var tier=TIERS[TIERS.length-1], tierIdx=TIERS.length-1;
+  for(var i=0;i<TIERS.length;i++){ if(score<TIERS[i].max){tier=TIERS[i];tierIdx=i;break;} }
+  /* BIWISI override: speaking its name always summons it; otherwise only a
+     flawless run qualifies — zero subwords, zero shattered pieces, short
+     sentence, near-zero threat score. The exact opposite of a BIBISI run. */
+  var sentenceRaw=($("sentence").value||"").toLowerCase();
+  var namedBiwisi = sentenceRaw.indexOf("biwisi")!==-1;
+  var flawlessRun = subs===0 && shattered===0 && toks.length<=7 && score<=11;
+  var isBiwisi = namedBiwisi || flawlessRun;
+  if(isBiwisi){ tier=BIWISI_TIER; tierIdx=6; }
+  if(tierIdx!==panelTierIdx){ panelTierIdx=tierIdx; panelReactionAt=performance.now(); }
+  $("verdictLevel").textContent="OPSEC LEVEL: "+tier.level;
+  $("verdictCard").className="verdict"+(tier.cls?" "+tier.cls:"");
+  $("pepeLine").textContent="“"+tier.pepe+"”";
+  $("vLine").textContent="“"+tier.v+"”";
+  $("verdictMeter").style.width=score.toFixed(0)+"%";
+  $("chipMoodVal").textContent=tier.mood;
+  $("chipTokensVal").textContent=toks.length+" TOKENS · "+subs+" SUB";
+  $("chamber").classList.toggle("bibisi", tierIdx===5);
+  $("chamber").classList.toggle("biwisi", isBiwisi);
+  var st=$("statsLine");
+  st.innerHTML="&gt; tokens: <b>"+toks.length+"</b> · subwords: <b>"+subs+"</b> · split-word pieces: <b>"+shattered+
+    "</b> · avg |vector|: <b>"+avgMag.toFixed(2)+"</b> · panel threat score: <b>"+score.toFixed(0)+"/100</b>"+
+    (isBiwisi? " · rival protocol: <b>BIWISI</b> ("+(namedBiwisi?"summoned by name":"flawless clean run")+")" : "");
+}
+
+/* =============== renderers =============== */
+function sparkline(v){
+  var w=120,h=22,pts=[];
+  var min=Math.min.apply(null,v), max=Math.max.apply(null,v), rg=(max-min)||1;
+  v.forEach(function(x,i){ pts.push((i/(v.length-1)*w).toFixed(1)+","+(h-3-((x-min)/rg)*(h-6)).toFixed(1)); });
+  return '<svg viewBox="0 0 '+w+' '+h+'" preserveAspectRatio="none" aria-hidden="true"><polyline points="'+pts.join(" ")+'" fill="none" stroke="#33ff66" stroke-width="1.6"/></svg>';
+}
+function renderTokens(){
+  var c=$("tokenChips"); c.innerHTML="";
+  state.tokens.forEach(function(t,i){
+    var b=document.createElement("button");
+    b.type="button"; b.className="tok"+(t.sub?" sub":"")+(i===state.sel?" sel":"");
+    var disp=t.text.replace(/^##/,"");
+    b.innerHTML='<span class="t-text">'+(t.sub?'<span class="hash">##</span>':"")+escapeHtml(disp)+'</span><span class="t-id">ID '+t.id+'</span>';
+    b.setAttribute("aria-label","Select token "+t.text);
+    b.addEventListener("click",function(){select(i);});
+    c.appendChild(b);
+  });
+}
+function escapeHtml(s){return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");}
+function renderEmbRows(){
+  var c=$("embRows"); c.innerHTML="";
+  state.tokens.forEach(function(t,i){
+    var v=state.vectors[i];
+    var b=document.createElement("button");
+    b.type="button"; b.className="emb-row"+(i===state.sel?" sel":"");
+    b.innerHTML='<span class="e-name">'+escapeHtml(t.text)+'</span><span class="e-id">#'+t.id+'</span>'+sparkline(v)+'<span class="e-mag">|v| '+magnitude(v).toFixed(2)+'</span>';
+    b.addEventListener("click",function(){select(i);});
+    c.appendChild(b);
+  });
+}
+function renderDossier(){
+  var t=state.tokens[state.sel], v=state.vectors[state.sel];
+  if(!t){$("dossier").innerHTML="";return;}
+  var nums=v.map(function(x){return '<span class="'+(x<0?"neg":"pos")+'">'+fmt(x)+'</span>';}).join("");
+  /* nearest neighbour */
+  var best=-2, bi=-1;
+  state.vectors.forEach(function(o,i){ if(i!==state.sel){var cs=cosine(v,o); if(cs>best){best=cs;bi=i;}} });
+  var near = bi>=0 ? state.tokens[bi].text+" (cos "+best.toFixed(2)+")" : "—";
+  $("dossier").innerHTML=
+    '<span class="d-stamp">FILE '+String(t.id).padStart(5,"0")+' · DO NOT READ ALOUD</span>'+
+    '<h3>'+escapeHtml(t.text)+'</h3>'+
+    '<p class="d-meta">TOKEN ID '+t.id+' · '+(t.sub?"SUBWORD PIECE OF “"+escapeHtml(t.word)+"”":"FROM “"+escapeHtml(t.word)+"”")+' · |v| '+magnitude(v).toFixed(3)+'</p>'+
+    '<div class="d-nums">'+nums+'</div>'+
+    '<p class="d-note">Nearest neighbour in the vault: <b style="color:var(--term)">'+escapeHtml(near)+'</b>. '+
+    (t.sub?'This fragment only means something glued to its stem — alone, it is evidence of a shattered word.':'This vector is the token\u2019s whole identity in the model: direction is meaning, length is confidence.')+'</p>';
+}
+function renderBars(){
+  var v=state.vectors[state.sel]; if(!v){$("barChart").innerHTML="";return;}
+  var W=460,H=210,mid=H/2-14,bw=W/16;
+  var max=1;
+  v.forEach(function(x){max=Math.max(max,Math.abs(x));});
+  var s='<svg viewBox="0 0 '+W+' '+H+'" role="img" aria-label="Bar chart of selected token embedding">';
+  s+='<line x1="0" y1="'+mid+'" x2="'+W+'" y2="'+mid+'" stroke="#14532d" stroke-width="1"/>';
+  v.forEach(function(x,i){
+    var h=Math.abs(x)/max*(mid-16);
+    var y= x>=0? mid-h : mid;
+    s+='<rect x="'+(i*bw+4)+'" y="'+y+'" width="'+(bw-8)+'" height="'+Math.max(h,1.5)+'" rx="2" fill="'+(x>=0?"#33ff66":"#ef4444")+'" opacity="0.9"/>';
+    s+='<text x="'+(i*bw+bw/2)+'" y="'+(H-2)+'" font-size="9" fill="#86a892" text-anchor="middle">d'+i+'</text>';
+  });
+  s+='<text x="2" y="12" font-size="9" fill="#86a892">+'+max.toFixed(1)+'</text><text x="2" y="'+(H-18)+'" font-size="9" fill="#86a892">−'+max.toFixed(1)+'</text>';
+  s+="</svg>";
+  $("barChart").innerHTML=s;
+}
+function renderScatter(){
+  var P=state.proj2; if(!P.length){$("scatter").innerHTML="";return;}
+  var W=460,H=280,pad=30;
+  var xs=P.map(function(p){return p[0];}), ys=P.map(function(p){return p[1];});
+  var x0=Math.min.apply(null,xs),x1=Math.max.apply(null,xs),y0=Math.min.apply(null,ys),y1=Math.max.apply(null,ys);
+  var rx=(x1-x0)||1, ry=(y1-y0)||1;
+  var s='<svg viewBox="0 0 '+W+' '+H+'" role="img" aria-label="2D PCA scatter plot of token embeddings">';
+  s+='<line x1="'+pad+'" y1="'+(H/2)+'" x2="'+(W-10)+'" y2="'+(H/2)+'" stroke="#0d2b16"/>';
+  s+='<line x1="'+(W/2)+'" y1="8" x2="'+(W/2)+'" y2="'+(H-pad)+'" stroke="#0d2b16"/>';
+  s+='<text x="'+(W-44)+'" y="'+(H/2-6)+'" font-size="9" fill="#86a892">PC1 →</text>';
+  s+='<text x="'+(W/2+6)+'" y="16" font-size="9" fill="#86a892">PC2 ↑</text>';
+  P.forEach(function(p,i){
+    var cx=pad+(p[0]-x0)/rx*(W-pad-14), cy=(H-pad)-(p[1]-y0)/ry*(H-pad-14);
+    var sel=i===state.sel;
+    s+='<g data-i="'+i+'" style="cursor:pointer"><circle cx="'+cx+'" cy="'+cy+'" r="'+(sel?8:5.5)+'" fill="'+(sel?"#33ff66":"#166534")+'" stroke="'+(sel?"#f0fdf4":"#4ade80")+'" stroke-width="'+(sel?2:1.2)+'"/>'+
+       '<text x="'+(cx+9)+'" y="'+(cy+3)+'" font-size="9.5" fill="'+(sel?"#f0fdf4":"#86a892")+'">'+escapeHtml(state.tokens[i].text)+'</text></g>';
+  });
+  s+="</svg>";
+  $("scatter").innerHTML=s;
+  Array.prototype.forEach.call($("scatter").querySelectorAll("g[data-i]"),function(g){
+    g.addEventListener("click",function(){select(parseInt(g.getAttribute("data-i"),10));});
+  });
+}
+function renderHeat(){
+  var n=state.tokens.length; if(!n){$("heatmap").innerHTML="";return;}
+  var wrap=document.createElement("div"); wrap.className="heat-wrap"+(n>10?" many":"");
+  wrap.style.gridTemplateColumns="repeat("+n+",1fr)";
+  state.tokens.forEach(function(t){var d=document.createElement("div");d.className="heat-axis";d.textContent=t.text;wrap.appendChild(d);});
+  var grid=document.createElement("div"); grid.className="heat";
+  grid.style.gridTemplateColumns="repeat("+n+",1fr)";
+  for(var i=0;i<n;i++) for(var j=0;j<n;j++){
+    var cs=cosine(state.vectors[i],state.vectors[j]);
+    var b=document.createElement("button"); b.type="button";
+    var t01=(cs+1)/2;
+    b.style.background= cs>=0
+      ? "rgba(51,255,102,"+(0.08+t01*0.85)+")"
+      : "rgba(239,68,68,"+(0.08+(1-t01)*0.6)+")";
+    if(i===state.sel&&j===state.sel) b.className="sel";
+    b.title=state.tokens[i].text+" × "+state.tokens[j].text+" = "+cs.toFixed(2);
+    (function(i2,j2,cs2){ b.addEventListener("click",function(){
+      select(i2);
+      $("heatReadout").innerHTML="Pair: <b>"+escapeHtml(state.tokens[i2].text)+"</b> × <b>"+escapeHtml(state.tokens[j2].text)+"</b> — cosine <b>"+cs2.toFixed(3)+"</b> "+(cs2>0.6?"— near-twins in meaning-space. The panel approves of nothing.":cs2<0?"— pointing in opposite directions.":"— loosely related at best.");
+    });})(i,j,cs);
+    grid.appendChild(b);
+  }
+  var host=$("heatmap"); host.innerHTML=""; host.appendChild(wrap); host.appendChild(grid);
+  var t=state.tokens[state.sel];
+  $("heatReadout").innerHTML="Selected token: <b>"+escapeHtml(t.text)+"</b> — its row shows how it relates to every other token.";
+}
+function renderReadout(){
+  var t=state.tokens[state.sel]; if(!t) return;
+  var best=-2,bi=-1;
+  state.vectors.forEach(function(o,i){if(i!==state.sel){var cs=cosine(state.vectors[state.sel],o);if(cs>best){best=cs;bi=i;}}});
+  $("selReadout").innerHTML="Selected: <b>"+escapeHtml(t.text)+"</b> (ID "+t.id+") · nearest neighbour: <b>"+(bi>=0?escapeHtml(state.tokens[bi].text):"—")+"</b>"+(bi>=0?" at cosine "+best.toFixed(2):"");
+}
+
+/* =============== 3D canvas plot =============== */
+var cv=$("space3d"), ctx=cv.getContext("2d");
+var yaw=-0.6, pitch=0.45, zoom=1, dragging=false, lx=0, ly=0, idleT=0;
+function sizeCanvas(){
+  var r=cv.getBoundingClientRect(), dpr=Math.min(window.devicePixelRatio||1,2);
+  cv.width=r.width*dpr; cv.height=r.height*dpr; ctx.setTransform(dpr,0,0,dpr,0,0);
+}
+function project(p){
+  var x=p[0],y=p[1],z=p[2];
+  var cy=Math.cos(yaw),sy=Math.sin(yaw),cp=Math.cos(pitch),sp=Math.sin(pitch);
+  var x1=x*cy - z*sy, z1=x*sy + z*cy;
+  var y2=y*cp - z1*sp, z2=y*sp + z1*cp;
+  var r=cv.getBoundingClientRect();
+  var scale=Math.min(r.width,r.height)*0.30*zoom;
+  var f=3.2/(3.2+z2*0.35);
+  return {x:r.width/2 + x1*scale*f, y:r.height/2 - y2*scale*f, z:z2, f:f};
+}
+function draw3D(){
+  var r=cv.getBoundingClientRect(); if(!r.width) return;
+  ctx.clearRect(0,0,r.width,r.height);
+  /* vault backdrop */
+  var g=ctx.createRadialGradient(r.width/2,r.height*0.42,40,r.width/2,r.height/2,r.width*0.75);
+  g.addColorStop(0,"#07240f"); g.addColorStop(1,"#010402");
+  ctx.fillStyle=g; ctx.fillRect(0,0,r.width,r.height);
+  /* floor grid */
+  ctx.strokeStyle="rgba(51,255,102,0.16)"; ctx.lineWidth=1;
+  var i,p1,p2;
+  for(i=-3;i<=3;i++){
+    p1=project([i*0.66,-1.15,-1.98]); p2=project([i*0.66,-1.15,1.98]);
+    ctx.beginPath(); ctx.moveTo(p1.x,p1.y); ctx.lineTo(p2.x,p2.y); ctx.stroke();
+    p1=project([-1.98,-1.15,i*0.66]); p2=project([1.98,-1.15,i*0.66]);
+    ctx.beginPath(); ctx.moveTo(p1.x,p1.y); ctx.lineTo(p2.x,p2.y); ctx.stroke();
+  }
+  /* links between near neighbours */
+  var P=state.proj3.map(function(p){return project(p);});
+  ctx.strokeStyle="rgba(74,222,128,0.20)";
+  for(i=0;i<state.vectors.length;i++) for(var j=i+1;j<state.vectors.length;j++){
+    if(cosine(state.vectors[i],state.vectors[j])>0.55){
+      ctx.beginPath(); ctx.moveTo(P[i].x,P[i].y); ctx.lineTo(P[j].x,P[j].y); ctx.stroke();
+    }
+  }
+  /* points back-to-front */
+  var order=P.map(function(p,i){return i;}).sort(function(a,b){return P[a].z-P[b].z;});
+  order.forEach(function(idx){
+    var p=P[idx], sel=idx===state.sel, t=state.tokens[idx];
+    var rad=(sel?9:6)*p.f;
+    ctx.beginPath(); ctx.arc(p.x,p.y,rad*2.1,0,Math.PI*2);
+    ctx.fillStyle= sel? "rgba(51,255,102,0.20)":"rgba(51,255,102,0.08)"; ctx.fill();
+    ctx.beginPath(); ctx.arc(p.x,p.y,rad,0,Math.PI*2);
+    ctx.fillStyle= sel? "#33ff66" : (t.sub? "#b91c1c" : "#22c55e");
+    ctx.fill();
+    ctx.strokeStyle= sel? "#f0fdf4":"rgba(240,253,244,0.5)"; ctx.lineWidth=sel?2:1; ctx.stroke();
+    ctx.font=(sel?"700 12px":"11px")+' "JetBrains Mono", monospace';
+    ctx.fillStyle= sel? "#f0fdf4":"rgba(220,252,231,0.82)";
+    ctx.fillText(t.text, p.x+rad+4, p.y+4);
+  });
+  /* hit-test data */
+  draw3D.points=P;
+}
+cv.addEventListener("pointerdown",function(e){dragging=true;lx=e.clientX;ly=e.clientY;cv.setPointerCapture(e.pointerId);});
+cv.addEventListener("pointermove",function(e){
+  if(!dragging) return;
+  yaw+=(e.clientX-lx)*0.008; pitch=clamp(pitch+(e.clientY-ly)*0.006,-1.2,1.2);
+  lx=e.clientX; ly=e.clientY; draw3D();
+});
+cv.addEventListener("pointerup",function(e){
+  dragging=false;
+  var r=cv.getBoundingClientRect(), mx=e.clientX-r.left, my=e.clientY-r.top;
+  if(draw3D.points){
+    var best=1e9,bi=-1;
+    draw3D.points.forEach(function(p,i){var d=(p.x-mx)*(p.x-mx)+(p.y-my)*(p.y-my); if(d<best){best=d;bi=i;}});
+    if(bi>=0 && best<900) select(bi);
+  }
+});
+cv.addEventListener("wheel",function(e){e.preventDefault(); zoom=clamp(zoom - e.deltaY*0.001,0.55,2.4); draw3D();},{passive:false});
+(function idleSpin(){
+  idleT+=0.008;
+  if(!dragging && !document.hidden && !$("app").hidden){ yaw+=0.0016; draw3D(); }
+  requestAnimationFrame(idleSpin);
+})();
+
+/* =============== pipeline driver =============== */
+function run(){
+  var s=$("sentence").value || "Transformers changed how machines understand language";
+  state.tokens=tokenise(s);
+  state.vectors=state.tokens.map(embeddingFor);
+  var proj=pcaProject(state.vectors,3);
+  /* normalise projections to a ~[-1.6,1.6] cube */
+  var flat=[]; proj.forEach(function(p){p.forEach(function(x){flat.push(Math.abs(x));});});
+  var mx=Math.max.apply(null,flat.concat([0.001]));
+  state.proj3=proj.map(function(p){return p.map(function(x){return x/mx*1.55;});});
+  state.proj2=state.proj3.map(function(p){return [p[0],p[1]];});
+  if(state.sel>=state.tokens.length) state.sel=0;
+  renderAll();
+}
+function renderAll(){
+  judge(); renderTokens(); renderEmbRows(); renderDossier(); renderBars(); renderScatter(); renderHeat(); renderReadout(); sizeCanvas(); draw3D();
+}
+function select(i){
+  state.sel=i;
+  renderTokens(); renderEmbRows(); renderDossier(); renderBars(); renderScatter(); renderHeat(); renderReadout(); draw3D();
+}
+
+/* =============== chamber tilt (3Dish parallax) =============== */
+var chamber=$("chamber");
+var fine = window.matchMedia && window.matchMedia("(hover:hover) and (pointer:fine)").matches;
+if(fine){
+  var scene=document.querySelector(".chamber-scene");
+  scene.addEventListener("pointermove",function(e){
+    var r=chamber.getBoundingClientRect();
+    var dx=(e.clientX-r.left)/r.width-0.5, dy=(e.clientY-r.top)/r.height-0.5;
+    chamber.style.transform="rotateY("+(dx*9)+"deg) rotateX("+(-dy*7)+"deg)";
+  });
+  scene.addEventListener("pointerleave",function(){chamber.style.transform="";});
+} else {
+  /* mobile: gentle idle sway */
+  (function sway(){
+    var t=Date.now()/2400;
+    chamber.style.transform="rotateY("+(Math.sin(t)*2.4)+"deg) rotateX("+(Math.cos(t*0.8)*1.6)+"deg)";
+    requestAnimationFrame(sway);
+  })();
+}
+
+/* =============== 3D figures: Pepe + V (Three.js, procedural) =============== */
+var lookTarget={x:0,y:0};
+chamber.addEventListener("pointermove",function(e){
+  var r=chamber.getBoundingClientRect();
+  if(!r.width) return;
+  lookTarget.x=((e.clientX-r.left)/r.width-0.5)*2;
+  lookTarget.y=((e.clientY-r.top)/r.height-0.5)*2;
+});
+chamber.addEventListener("pointerleave",function(){lookTarget.x=0;lookTarget.y=0;});
+
+(function initFigures(){
+  var canvas=$("facesCanvas");
+  function fallback(){
+    if(canvas) canvas.style.display="none";
+    var l=$("faceLabels"); if(l) l.style.display="none";
+    var m=$("facesMsg"); if(m) m.hidden=false;
+  }
+  if(!window.THREE || !canvas){ fallback(); return; }
+  var renderer;
+  try{
+    renderer=new THREE.WebGLRenderer({canvas:canvas, antialias:true, alpha:true});
+  }catch(e){ fallback(); return; }
+  var reduced = !!(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+  var AM = reduced?0:1;
+  renderer.setClearColor(0x000000,0);
+  if(THREE.ACESFilmicToneMapping) renderer.toneMapping=THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure=1.12;
+  if(THREE.SRGBColorSpace) renderer.outputColorSpace=THREE.SRGBColorSpace;
+  else if(THREE.sRGBEncoding) renderer.outputEncoding=THREE.sRGBEncoding;
+  renderer.shadowMap.enabled=true;
+  if(THREE.PCFSoftShadowMap) renderer.shadowMap.type=THREE.PCFSoftShadowMap;
+  var scene=new THREE.Scene();
+  scene.fog=new THREE.Fog(0x020503, 8, 14);
+  var camera=new THREE.PerspectiveCamera(38, 2, 0.1, 60);
+  camera.position.set(0,0.15,5.4);
+
+  scene.add(new THREE.HemisphereLight(0xd8ffe2, 0x0a2010, 1.0));
+  var key=new THREE.DirectionalLight(0xffffff, 2.0); key.position.set(3,4.5,5); key.castShadow=true; key.shadow.mapSize.set(1024,1024); key.shadow.bias=-0.0004; key.shadow.radius=4; scene.add(key);
+  var fill=new THREE.DirectionalLight(0xbfffd4, 0.55); fill.position.set(-4,1.5,4); scene.add(fill);
+  var topLight=new THREE.SpotLight(0xffffff, 18, 20, Math.PI/5, 0.55, 1.2); topLight.position.set(0,5.5,3.5); scene.add(topLight);
+  var rim=new THREE.PointLight(0x33ff66, 7, 14); rim.position.set(0,1.6,2.6); scene.add(rim);
+  var back=new THREE.PointLight(0x1d7a3a, 5, 12); back.position.set(-3,2,-2.5); scene.add(back);
+  var under=new THREE.PointLight(0xffe9c9, 2.2, 9); under.position.set(0,-2.2,3.2); scene.add(under);
+
+  function mat(c,r,opts){
+    var o={color:c, roughness:(r==null?0.55:r), metalness:0.04};
+    if(opts){ for(var k in opts) o[k]=opts[k]; }
+    if(THREE.MeshPhysicalMaterial){
+      o.clearcoat=0.35; o.clearcoatRoughness=0.55; o.sheen=0.25; o.sheenColor=new THREE.Color(0xffffff);
+      return new THREE.MeshPhysicalMaterial(o);
+    }
+    return new THREE.MeshStandardMaterial(o);
+  }
+  function sph(r,material,sx,sy,sz,x,y,z,parent){
+    var ms=new THREE.Mesh(new THREE.SphereGeometry(r,96,64), material);
+    ms.scale.set(sx||1,sy||1,sz||1); ms.position.set(x||0,y||0,z||0);
+    ms.castShadow=true; ms.receiveShadow=true;
+    if(ms.geometry.computeVertexNormals) ms.geometry.computeVertexNormals();
+    parent.add(ms); return ms;
+  }
+  function cyl(rt,rb,h,material,x,y,z,parent,seg){
+    var ms=new THREE.Mesh(new THREE.CylinderGeometry(rt,rb,h,seg||64, 8), material);
+    ms.position.set(x||0,y||0,z||0); ms.castShadow=true; ms.receiveShadow=true;
+    parent.add(ms); return ms;
+  }
+  function makePalm(material){
+    var g=new THREE.Group();
+    sph(0.30,material,1,1.25,0.42,0,0,0,g);
+    [-0.14,0,0.14].forEach(function(fx){
+      var f=cyl(0.042,0.048,0.24,material,fx,0.42,0.01,g,32);
+      f.rotation.z=-fx*0.7;
+      /* fingertip cap — rounded end instead of a flat cylinder cut */
+      sph(0.042,material,1,1,1,fx - Math.sin(f.rotation.z)*0.0,0.54,0.01,g);
+    });
+    var th=sph(0.09,material,1,1.5,0.5,0.30,0.02,0.02,g); th.rotation.z=-0.7;
+    return g;
+  }
+
+  var GREEN=new THREE.Color(0x3d9e4d), RED=new THREE.Color(0xd92b20), RED_EM=new THREE.Color(0x7a0d06);
+  var BLEACH=new THREE.Color(0xeef7dc), BLEACH_EM=new THREE.Color(0x5f7050);
+  var MASK_BASE=new THREE.Color(0xe9e1cd), MASK_BLEACH=new THREE.Color(0xffffff);
+  var pepeSkin=mat(0x3d9e4d,0.42,{clearcoat:0.55,clearcoatRoughness:0.35,sheen:0.4});
+  var pepeBelly=mat(0x8fce6a,0.5,{clearcoat:0.3});
+  var pepeDark=mat(0x256b32,0.58);
+  var white=mat(0xf5f5ee,0.18,{clearcoat:0.9,clearcoatRoughness:0.12});
+  var eyeGloss=mat(0xffffff,0.05,{clearcoat:1,clearcoatRoughness:0.05,metalness:0});
+  var black=mat(0x101010,0.32,{clearcoat:0.7,clearcoatRoughness:0.2});
+  var irisMat=mat(0x1a1a12,0.25,{clearcoat:0.9});
+  var mouthMat=mat(0x8a3416,0.5,{clearcoat:0.4});
+  var lipMat=mat(0xb85c2e,0.45,{clearcoat:0.5});
+  var maskMat=mat(0xe9e1cd,0.32,{clearcoat:0.75,clearcoatRoughness:0.28,sheen:0.15});
+  var maskShade=mat(0xd9cfb2,0.42,{clearcoat:0.5});
+  var maskEdge=mat(0xcbbf9e,0.5);
+  var gloveMat=mat(0x23211e,0.55);
+  var pinkMat=mat(0xd98a7e,0.6); pinkMat.transparent=true; pinkMat.opacity=0.5;
+  var hatMat=mat(0x17181d,0.48,{clearcoat:0.45,clearcoatRoughness:0.4});
+  var hatBand=mat(0x2e1111,0.5);
+  var cloakMat=mat(0x14161c,0.62);
+
+  /* ---- Pepe — high-poly sculpt ---- */
+  var pepeOuter=new THREE.Group(), pepe=new THREE.Group();
+  pepeOuter.add(pepe); scene.add(pepeOuter);
+  /* torso / neck / belly — layered so the head sits on a body, not a cone */
+  cyl(0.52,0.74,0.72,pepeDark,0,-1.04,-0.06,pepe,64);
+  cyl(0.34,0.46,0.42,pepeSkin,0,-0.68,0.02,pepe,64);
+  sph(0.46,pepeBelly,1,1.15,0.55,0,-1.02,0.28,pepe);
+  sph(0.30,pepeDark,1,0.7,0.8,-0.58,-0.92,0.05,pepe);
+  sph(0.30,pepeDark,1,0.7,0.8, 0.58,-0.92,0.05,pepe);
+  /* cranium + jaw + cheeks + chin — overlapping spheres read as one sculpted head at 96×64 */
+  sph(0.92,pepeSkin,1.06,0.78,0.84,0,0,0,pepe);
+  sph(0.62,pepeSkin,1.08,0.62,0.72,0,-0.34,0.18,pepe);           /* jaw / lower face */
+  sph(0.34,pepeSkin,1,0.82,0.72,-0.46,-0.18,0.42,pepe);          /* left cheek */
+  sph(0.34,pepeSkin,1,0.82,0.72, 0.46,-0.18,0.42,pepe);          /* right cheek */
+  sph(0.26,pepeSkin,1.15,0.6,0.7,0,-0.52,0.38,pepe);             /* chin / mouth pad */
+  sph(0.20,pepeSkin,1.3,0.55,0.6,0,0.18,0.62,pepe);              /* snout bridge */
+  sph(0.30,pepeSkin,1,1.08,0.82,-0.37,0.60,0.30,pepe);           /* left eye stalk */
+  sph(0.30,pepeSkin,1,1.08,0.82, 0.37,0.60,0.30,pepe);           /* right eye stalk */
+  sph(0.16,pepeSkin,1,0.9,0.7,-0.86,0.02,0.05,pepe);             /* ear / side bulge L */
+  sph(0.16,pepeSkin,1,0.9,0.7, 0.86,0.02,0.05,pepe);             /* ear / side bulge R */
+  var pepePupils=[];
+  [-0.37,0.37].forEach(function(ex){
+    sph(0.215,white,1,1.12,0.72,ex,0.64,0.50,pepe);              /* eyeball */
+    sph(0.225,pepeSkin,1,0.55,0.72,ex,0.80,0.44,pepe);           /* upper eyelid */
+    var iris=sph(0.128,irisMat,1,1.1,0.55,ex,0.615,0.635,pepe);  /* iris */
+    iris.userData.baseX=ex;
+    var pu=sph(0.088,black,1,1.15,0.6,ex,0.60,0.675,pepe);       /* pupil */
+    pu.userData.baseX=ex; pepePupils.push(pu); pepePupils.push(iris);
+    sph(0.032,eyeGloss,1,1,1,ex-0.035,0.685,0.735,pepe);         /* catchlight */
+    sph(0.016,eyeGloss,1,1,1,ex+0.045,0.565,0.72,pepe);          /* secondary glint */
+    var brow=new THREE.Mesh(new THREE.TorusGeometry(0.20,0.038,24,64,Math.PI), pepeDark);
+    brow.position.set(ex,0.86,0.52); brow.rotation.x=0.5; brow.castShadow=true; pepe.add(brow);
+    var crease=new THREE.Mesh(new THREE.TorusGeometry(0.225,0.014,16,48,Math.PI), pepeDark);
+    crease.position.set(ex,0.755,0.53); crease.rotation.x=0.55; pepe.add(crease);
+  });
+  /* nostrils — recessed, with a raised rim so they read in light */
+  sph(0.055,black,1,0.7,0.4,-0.11,0.10,0.805,pepe);
+  sph(0.055,black,1,0.7,0.4, 0.11,0.10,0.805,pepe);
+  sph(0.075,pepeSkin,1.2,0.6,0.35,-0.11,0.145,0.78,pepe);
+  sph(0.075,pepeSkin,1.2,0.6,0.35, 0.11,0.145,0.78,pepe);
+  /* mouth — lip torus (high segment) + darker mouth line + lower lip.
+     TorusGeometry arc 0..PI is the TOP half of the ring (∩ = frown), so the
+     mouth must be rotated PI to flip it into the bottom half (∪ = smile) —
+     same flip V's grin uses below. */
+  var mouth=new THREE.Mesh(new THREE.TorusGeometry(0.46,0.055,32,96,Math.PI), lipMat);
+  mouth.position.set(0,-0.02,0.70); mouth.rotation.z=Math.PI+Math.PI*0.06; mouth.scale.set(1.3,0.55,1); mouth.castShadow=true; pepe.add(mouth);
+  var mouthLine=new THREE.Mesh(new THREE.TorusGeometry(0.44,0.018,16,96,Math.PI), mouthMat);
+  mouthLine.position.set(0,-0.015,0.735); mouthLine.rotation.z=Math.PI+Math.PI*0.06; mouthLine.scale.set(1.3,0.55,1); pepe.add(mouthLine);
+  sph(0.22,lipMat,1.5,0.45,0.5,0,-0.42,0.58,pepe);               /* lower lip — sits below the smile's dip */
+  var pepePalm=makePalm(pepeSkin);
+  pepePalm.userData.down=new THREE.Vector3(0.62,-1.32,0.25);
+  pepePalm.userData.face=new THREE.Vector3(0.03,0.14,0.88);
+  pepePalm.position.copy(pepePalm.userData.down);
+  pepePalm.rotation.z=-0.5;
+  pepe.add(pepePalm);
+
+  /* ---- V (Guy Fawkes) — high-poly sculpt ---- */
+  var vOuter=new THREE.Group(), vg=new THREE.Group();
+  vOuter.add(vg); scene.add(vOuter);
+  cyl(0.44,0.80,0.9,cloakMat,0,-1.08,-0.06,vg,64);
+  cyl(0.30,0.42,0.36,maskShade,0,-0.72,0.02,vg,64);              /* neck under mask */
+  sph(0.34,cloakMat,1,0.65,0.75,-0.52,-0.98,0.02,vg);            /* shoulders */
+  sph(0.34,cloakMat,1,0.65,0.75, 0.52,-0.98,0.02,vg);
+  /* mask shell + forehead + cheekbones + jaw + chin */
+  sph(0.88,maskMat,0.88,1.08,0.78,0,0,0,vg);                     /* main mask */
+  sph(0.58,maskMat,1.02,0.62,0.62,0,0.48,0.22,vg);               /* forehead dome */
+  sph(0.52,maskMat,1.05,0.62,0.62,0,-0.42,0.14,vg);              /* jaw */
+  sph(0.20,maskMat,1.25,0.65,0.65,-0.48,-0.10,0.44,vg);          /* cheekbone L */
+  sph(0.20,maskMat,1.25,0.65,0.65, 0.48,-0.10,0.44,vg);          /* cheekbone R */
+  sph(0.22,maskMat,1.1,0.7,0.6,0,-0.66,0.34,vg);                 /* chin */
+  sph(0.10,maskShade,0.9,1.7,0.9,0,0.06,0.70,vg);                /* nose bridge */
+  sph(0.085,maskMat,1,0.85,1.05,0,-0.10,0.735,vg);               /* nose tip */
+  sph(0.05,maskShade,1,0.7,0.5,-0.045,-0.185,0.71,vg);           /* nostril shadow L */
+  sph(0.05,maskShade,1,0.7,0.5, 0.045,-0.185,0.71,vg);           /* nostril shadow R */
+  /* brow ridge + mask edge rim (thin torus following the face oval) */
+  sph(0.42,maskShade,1.55,0.38,0.55,0,0.40,0.52,vg);
+  var rimT=new THREE.Mesh(new THREE.TorusGeometry(0.80,0.022,20,128), maskEdge);
+  rimT.position.set(0,-0.02,0.06); rimT.scale.set(0.88,1.08,1); rimT.castShadow=true; vg.add(rimT);
+  var vShift=[], vLids=[];
+  [-0.31,0.31].forEach(function(ex){
+    var eye=sph(0.125,black,1.4,0.55,0.4,ex,0.24,0.665,vg);
+    eye.rotation.z= ex<0? 0.18:-0.18; eye.userData.baseX=ex; vShift.push(eye);
+    var lid=sph(0.13,maskShade,1.45,0.16,0.5,ex,0.315,0.685,vg);
+    lid.userData.baseY=0.315; lid.userData.baseX=ex; vLids.push(lid); vShift.push(lid);
+    var br=cyl(0.026,0.026,0.44,black,ex*1.03,0.46,0.66,vg,32);
+    br.rotation.z= ex<0? -1.05: 1.05; br.rotation.x=0.35; br.userData.baseX=ex*1.03; vShift.push(br);
+  });
+  [-1,1].forEach(function(sgn){
+    /* moustache — three overlapping tufts per side reads as hair volume, not one blob */
+    var mo=sph(0.15,black,1.9,0.5,0.45,sgn*0.20,-0.26,0.66,vg);
+    mo.rotation.z=sgn*-0.45;
+    var mo2=sph(0.11,black,1.7,0.45,0.4,sgn*0.34,-0.30,0.60,vg); mo2.rotation.z=sgn*-0.7;
+    var mo3=sph(0.09,black,1.5,0.45,0.4,sgn*0.07,-0.235,0.69,vg); mo3.rotation.z=sgn*-0.2;
+  });
+  var grin=new THREE.Mesh(new THREE.TorusGeometry(0.28,0.036,24,96,Math.PI), black);
+  grin.position.set(0,-0.30,0.70); grin.rotation.z=Math.PI; grin.castShadow=true; vg.add(grin);
+  var grinLip=new THREE.Mesh(new THREE.TorusGeometry(0.28,0.014,16,96,Math.PI), maskShade);
+  grinLip.position.set(0,-0.285,0.715); grinLip.rotation.z=Math.PI; vg.add(grinLip);
+  var goatee=new THREE.Mesh(new THREE.ConeGeometry(0.15,0.44,64,6), black);
+  goatee.position.set(0,-0.74,0.52); goatee.rotation.x=Math.PI-0.25; goatee.castShadow=true; vg.add(goatee);
+  sph(0.09,black,1,1.5,0.7,0,-0.60,0.55,vg);                     /* goatee root */
+  sph(0.14,pinkMat,1,0.6,0.4,-0.52,-0.14,0.52,vg);
+  sph(0.14,pinkMat,1,0.6,0.4, 0.52,-0.14,0.52,vg);
+  var brim=cyl(0.80,0.80,0.05,hatMat,0,0.94,0,vg,96); brim.scale.z=0.82; brim.rotation.z=0.05;
+  var brimEdge=new THREE.Mesh(new THREE.TorusGeometry(0.80,0.018,16,128), hatMat);
+  brimEdge.position.set(0,0.94,0); brimEdge.rotation.x=Math.PI/2; brimEdge.scale.set(1,0.82,1); brimEdge.rotation.z=0.05; vg.add(brimEdge);
+  var htop=cyl(0.44,0.54,0.58,hatMat,0,1.24,0,vg,80); htop.rotation.z=0.05;
+  sph(0.44,hatMat,1,0.32,1,0,1.53,0,vg);                         /* rounded crown top */
+  var band=cyl(0.545,0.555,0.13,hatBand,0,1.02,0,vg,80); band.rotation.z=0.05;
+  var vPalm=makePalm(gloveMat);
+  vPalm.userData.down=new THREE.Vector3(-0.62,-1.32,0.25);
+  vPalm.userData.face=new THREE.Vector3(-0.03,0.20,0.82);
+  vPalm.position.copy(vPalm.userData.down);
+  vPalm.rotation.z=0.5;
+  vg.add(vPalm);
+
+  /* ---- layout / resize ---- */
+  var baseSpread=1.3, baseScale=1;
+  function layout(){
+    var w=canvas.clientWidth||300, h=canvas.clientHeight||220;
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio||1, w<560?2:2.5));
+    renderer.setSize(w,h,false);
+    camera.aspect=w/h;
+    var vH=2*Math.tan(camera.fov*Math.PI/360)*camera.position.z;
+    var vW=vH*camera.aspect;
+    baseSpread=Math.min(vW*0.27, 2.85);
+    baseScale=Math.min(1.1, vH/3.35, vW/5.4);
+    pepeOuter.position.x=-baseSpread;
+    vOuter.position.x= baseSpread;
+    camera.updateProjectionMatrix();
+  }
+  layout();
+  window.addEventListener("resize",layout);
+
+  var stageVisible=true;
+  if(window.IntersectionObserver){
+    new IntersectionObserver(function(en){stageVisible=en[0].isIntersecting;},{threshold:0.05}).observe(canvas);
+  }
+
+  /* ---- animation ---- */
+  var clock3=new THREE.Clock();
+  var lookCur={x:0,y:0}, lookCurV={x:0,y:0};
+  var bibisiCur=0, sideCur=0, biwisiCur=0;
+  var nextBlink=performance.now()+1600, blinkStart=-100000;
+  function tick(){
+    requestAnimationFrame(tick);
+    var dt=Math.min(clock3.getDelta(),0.05);
+    var t=clock3.elapsedTime;
+    if(document.hidden || $("app").hidden || !stageVisible) return;
+    var now=performance.now();
+
+    /* head tracking: pointer / chamber tilt, idle wander when untouched */
+    var idleX = AM? Math.sin(t*0.35)*0.35 : 0;
+    var idleY = AM? Math.cos(t*0.27)*0.20 : 0;
+    var tx = Math.abs(lookTarget.x)>0.02? lookTarget.x : idleX;
+    var ty = Math.abs(lookTarget.y)>0.02? lookTarget.y : idleY;
+    lookCur.x += (tx-lookCur.x)*Math.min(1,dt*4.5);
+    lookCur.y += (ty-lookCur.y)*Math.min(1,dt*4.5);
+    lookCurV.x += (tx-lookCurV.x)*Math.min(1,dt*2.8);
+    lookCurV.y += (ty-lookCurV.y)*Math.min(1,dt*2.8);
+
+    /* tier-driven state */
+    bibisiCur += ((panelTierIdx===5?1:0)-bibisiCur)*Math.min(1,dt*2.6);
+    biwisiCur += ((panelTierIdx===6?1:0)-biwisiCur)*Math.min(1,dt*2.6);
+    sideCur += (((panelTierIdx===2||panelTierIdx===3)?1:0)-sideCur)*Math.min(1,dt*3);
+
+    /* Pepe flushes red at BIBISI tier, bleaches pale at BIWISI, green otherwise.
+       V's mask bleaches to pure white at BIWISI — the rival uniform. */
+    pepeSkin.color.copy(GREEN).lerp(RED, bibisiCur).lerp(BLEACH, biwisiCur);
+    pepeSkin.emissive.copy(RED_EM).multiplyScalar(bibisiCur*0.6).lerp(BLEACH_EM, biwisiCur*0.45);
+    maskMat.color.copy(MASK_BASE).lerp(MASK_BLEACH, biwisiCur);
+
+    /* facepalm palms rise with the BIBISI factor */
+    pepePalm.position.lerpVectors(pepePalm.userData.down, pepePalm.userData.face, bibisiCur);
+    pepePalm.rotation.z=-0.5 + bibisiCur*0.62;
+    pepePalm.rotation.x=-0.15*bibisiCur;
+    vPalm.position.lerpVectors(vPalm.userData.down, vPalm.userData.face, bibisiCur);
+    vPalm.rotation.z=0.5 - bibisiCur*0.6;
+    vPalm.rotation.x=-0.15*bibisiCur;
+
+    /* idle bobbing / breathing sway / head tilt */
+    pepe.position.y=Math.sin(t*1.35)*0.05*AM;
+    vg.position.y=Math.sin(t*1.35+1.4)*0.045*AM;
+    pepe.rotation.z=Math.sin(t*0.9)*0.03*AM;
+    vg.rotation.z=Math.sin(t*0.8+2.0)*0.025*AM;
+    var brP=baseScale*(1+Math.sin(t*1.35)*0.013*AM);
+    var brV=baseScale*(1+Math.sin(t*1.35+1.4)*0.013*AM);
+    pepe.scale.set(brP,brP,brP);
+    vg.scale.set(brV,brV,brV);
+
+    /* look rotations (V lags slightly behind Pepe) */
+    pepe.rotation.y=lookCur.x*0.38;
+    pepe.rotation.x=lookCur.y*0.18 + Math.sin(t*1.35)*0.012*AM;
+    vg.rotation.y=lookCurV.x*0.34;
+    vg.rotation.x=lookCurV.y*0.16;
+
+    /* sustained side-eye at the middle tiers */
+    var so=sideCur*0.055;
+    pepePupils.forEach(function(p){p.position.x=p.userData.baseX+so;});
+    vShift.forEach(function(p){p.position.x=p.userData.baseX+so*0.8;});
+
+    /* one-shot reaction when the tier changes */
+    if(AM && panelReactionAt>0){
+      var el=(now-panelReactionAt)/1000, rp=Math.min(el/1.15,1);
+      if(rp<1){
+        var decay=1-rp;
+        if(panelTierIdx<=1){
+          var nod=Math.sin(rp*Math.PI*2)*0.20*decay;
+          pepe.rotation.x+=nod; vg.rotation.x+=nod*0.85;
+        } else if(panelTierIdx===6){
+          /* BIWISI arrival: a slow, serene rise — no head-shake, no panic */
+          var rise=Math.sin(rp*Math.PI)*0.14*decay;
+          pepe.position.y+=rise; vg.position.y+=rise;
+          pepe.rotation.x-=rise*0.5; vg.rotation.x-=rise*0.5;
+        } else if(panelTierIdx<=4){
+          var shk=Math.sin(rp*Math.PI*5)*0.15*decay;
+          pepe.rotation.y+=shk; vg.rotation.y+=shk*0.9;
+        }
+      }
+    }
+
+    /* BIBISI glitch shake — BIWISI gets the opposite: a calm levitation */
+    if(AM && panelTierIdx===5){
+      pepeOuter.position.x=-baseSpread+(Math.random()-0.5)*0.055;
+      vOuter.position.x= baseSpread+(Math.random()-0.5)*0.055;
+      pepeOuter.position.y=0; vOuter.position.y=0;
+      pepe.rotation.z+=(Math.random()-0.5)*0.05;
+      vg.rotation.z+=(Math.random()-0.5)*0.05;
+    } else if(panelTierIdx===6){
+      pepeOuter.position.x=-baseSpread;
+      vOuter.position.x= baseSpread;
+      var lev=AM? Math.sin(t*0.9)*0.07*biwisiCur : 0;
+      pepeOuter.position.y=lev; vOuter.position.y=-lev;
+    } else {
+      pepeOuter.position.x=-baseSpread;
+      vOuter.position.x= baseSpread;
+      pepeOuter.position.y=0; vOuter.position.y=0;
+    }
+
+    /* V blinking: cream eyelids sweep down over the eyes and back up */
+    if(now>=nextBlink){ blinkStart=now; nextBlink=now+2000+Math.random()*2600; }
+    var bp=(now-blinkStart)/200;
+    var cover= (bp>=0 && bp<1)? Math.sin(bp*Math.PI) : 0;
+    vLids.forEach(function(lid){
+      lid.scale.y=0.16+cover*1.0;
+      lid.position.y=lid.userData.baseY-cover*0.05;
+    });
+
+    renderer.render(scene,camera);
+  }
+  tick();
+})();
+
+/* clock */
+setInterval(function(){
+  var d=new Date();
+  $("clockEl").textContent="CAM 03 · "+String(d.getHours()).padStart(2,"0")+":"+String(d.getMinutes()).padStart(2,"0")+":"+String(d.getSeconds()).padStart(2,"0");
+},1000);
+
+/* =============== events =============== */
+$("runBtn").addEventListener("click",run);
+$("sentence").addEventListener("input",run);
+$("sentence").addEventListener("keydown",function(e){if(e.key==="Enter") run();});
+Array.prototype.forEach.call(document.querySelectorAll(".ex-btn"),function(b){
+  b.addEventListener("click",function(){$("sentence").value=b.getAttribute("data-ex"); state.sel=0; run();});
+});
+window.addEventListener("resize",function(){sizeCanvas(); draw3D();});
+
+/* =============== boot sequence =============== */
+var LINES=[
+  ["> BIBISI/OS v6.6.6 — cold boot",""],
+  ["> mounting /dev/latent_space ......... ","dim"],
+  ["> loading vocab [32,000 entries] ..... ","dim"],
+  ["> calibrating judgement panel ........ ","dim"],
+  ["> pepe_status: AWAKE",""],
+  ["> v_status: MASK ON, ARMS CROSSED",""],
+  ["> warning: embeddings may expose you","red"],
+  ["> all systems nominal. probably.",""]
+];
+var bootEl=$("bootText"), barEl=$("bootBar"), li=0;
+function nextLine(){
+  if(li>=LINES.length){
+    $("startBtn").classList.add("ready");
+    bootEl.innerHTML += '<span class="dim">&gt; press start to enter the chamber_</span>';
+    return;
+  }
+  var parts=LINES[li];
+  bootEl.innerHTML += (parts[1]? '<span class="'+parts[1]+'">'+parts[0]+" OK</span>" : parts[0]+" OK")+"\n";
+  li++;
+  barEl.style.width=(li/LINES.length*100)+"%";
+  setTimeout(nextLine, 240+Math.random()*220);
+}
+setTimeout(nextLine, 350);
+$("startBtn").addEventListener("click",function(){
+  var boot=$("boot");
+  boot.classList.add("poweroff");
+  setTimeout(function(){
+    boot.style.display="none";
+    $("app").hidden=false;
+    run();
+    window.scrollTo(0,0);
+  },560);
+});
+
+/* initial hidden render prep */
+run();
+$("app").hidden=true;
+})();
+</script>
+</body>
+</html>
